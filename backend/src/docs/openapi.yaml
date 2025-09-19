@@ -1,0 +1,65 @@
+openapi: 3.0.3
+info:
+  title: Patient Workflow API
+  version: 1.0.0
+servers:
+  - url: /api/v1
+paths:
+  /auth/register:
+    post:
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, fullName, password]
+              properties:
+                email: { type: string, format: email }
+                fullName: { type: string }
+                password: { type: string, minLength: 8 }
+                role:
+                  type: string
+                  enum: [superadmin, admin, doctor, patient]
+      responses:
+        "201": { description: Created }
+        "400": { description: Bad Request }
+  /auth/login:
+    post:
+      summary: Login and receive httpOnly cookies
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, minLength: 8 }
+      responses:
+        "200": { description: OK }
+        "401": { description: Unauthorized }
+  /auth/logout:
+    post:
+      summary: Logout and clear cookies
+      responses:
+        "204": { description: No Content }
+        "401": { description: Unauthorized }
+  /auth/me:
+    get:
+      summary: Get current user
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  userId: { type: string }
+                  role:
+                    type: string
+                    enum: [superadmin, admin, doctor, patient]
+        "401": { description: Unauthorized }

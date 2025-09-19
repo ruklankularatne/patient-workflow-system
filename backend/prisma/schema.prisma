@@ -1,0 +1,114 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  superadmin
+  admin
+  doctor
+  patient
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  fullName     String
+  role         Role     @default(patient)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  Doctor         Doctor?
+  appointments   Appointment[]   @relation("PatientAppointments")
+  medicalRecords MedicalRecord[] @relation("PatientMedicalRecords")
+  AuditLogs      AuditLog[]      @relation("UserAuditActor")
+
+  @@index([role])
+  @@index([email])
+}
+
+model Doctor {
+  id             String   @id @default(cuid())
+  userId         String   @unique
+  specialty      String
+  location       String
+  bio            String?
+  profilePicture String? // path/URL; served from a Docker volume
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relations
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  appointments   Appointment[]
+  medicalRecords MedicalRecord[]
+
+  @@index([specialty])
+  @@index([location])
+}
+
+model Appointment {
+  id        String   @id @default(cuid())
+  patientId String
+  doctorId  String
+  date      DateTime
+  time      String // "HH:mm" to avoid time zone surprises across regions
+  status    String   @default("pending") // pending|confirmed|completed|cancelled
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  patient       User           @relation("PatientAppointments", fields: [patientId], references: [id])
+  doctor        Doctor         @relation(fields: [doctorId], references: [id])
+  MedicalRecord MedicalRecord?
+
+  @@index([patientId, date])
+  @@index([doctorId, date, time])
+}
+
+model MedicalRecord {
+  id            String   @id @default(cuid())
+  appointmentId String   @unique
+  patientId     String
+  doctorId      String
+  diagnosis     String?
+  prescription  String?
+  attachments   String[] // file paths (stored in Docker volume)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  patient     User        @relation("PatientMedicalRecords", fields: [patientId], references: [id])
+  doctor      Doctor      @relation(fields: [doctorId], references: [id])
+
+  @@index([patientId])
+  @@index([doctorId])
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  actorUserId String?
+  entity      String
+  entityId    String?
+  action      String // create|update|delete|login|logout|...
+  ip          String?
+  userAgent   String?
+  before      Json?
+  after       Json?
+  createdAt   DateTime @default(now())
+
+  // Relations
+  actor User? @relation("UserAuditActor", fields: [actorUserId], references: [id])
+
+  @@index([entity])
+  @@index([entityId])
+  @@index([createdAt])
+}

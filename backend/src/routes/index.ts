@@ -1,33 +1,7 @@
 import { Router } from 'express';
+import authRoutes from './auth.routes';
 
-import Paths from '@src/common/constants/Paths';
-import UserRoutes from './UserRoutes';
+const api = Router();
+api.use('/auth', authRoutes);
 
-
-/******************************************************************************
-                                Setup
-******************************************************************************/
-
-const apiRouter = Router();
-
-
-// ** Add UserRouter ** //
-
-// Init router
-const userRouter = Router();
-
-// Get all users
-userRouter.get(Paths.Users.Get, UserRoutes.getAll);
-userRouter.post(Paths.Users.Add, UserRoutes.add);
-userRouter.put(Paths.Users.Update, UserRoutes.update);
-userRouter.delete(Paths.Users.Delete, UserRoutes.delete);
-
-// Add UserRouter
-apiRouter.use(Paths.Users.Base, userRouter);
-
-
-/******************************************************************************
-                                Export default
-******************************************************************************/
-
-export default apiRouter;
+export default api;

@@ -15,16 +15,15 @@ enum Role {
 }
 
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  passwordHash String
-  fullName     String
-  role         Role     @default(patient)
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id            String         @id @default(cuid())
+  email         String         @unique
+  passwordHash  String
+  fullName      String
+  role          Role           @default(patient)
+  isActive      Boolean        @default(true)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
 
-  // Relations
   Doctor         Doctor?
   appointments   Appointment[]   @relation("PatientAppointments")
   medicalRecords MedicalRecord[] @relation("PatientMedicalRecords")
@@ -35,38 +34,37 @@ model User {
 }
 
 model Doctor {
-  id             String   @id @default(cuid())
-  userId         String   @unique
-  specialty      String
-  location       String
-  bio            String?
-  profilePicture String? // path/URL; served from a Docker volume
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id              String          @id @default(cuid())
+  userId          String          @unique
+  specialty       String
+  location        String
+  bio             String?
+  profilePicture  String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
 
-  // Relations
-  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  appointments   Appointment[]
-  medicalRecords MedicalRecord[]
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  appointments    Appointment[]
+  medicalRecords  MedicalRecord[]
+  schedules       Schedule[]
 
   @@index([specialty])
   @@index([location])
 }
 
 model Appointment {
-  id        String   @id @default(cuid())
-  patientId String
-  doctorId  String
-  date      DateTime
-  time      String // "HH:mm" to avoid time zone surprises across regions
-  status    String   @default("pending") // pending|confirmed|completed|cancelled
-  notes     String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id         String   @id @default(cuid())
+  patientId  String
+  doctorId   String
+  date       DateTime
+  time       String
+  status     String   @default("pending")
+  notes      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
-  // Relations
-  patient       User           @relation("PatientAppointments", fields: [patientId], references: [id])
-  doctor        Doctor         @relation(fields: [doctorId], references: [id])
+  patient      User     @relation("PatientAppointments", fields: [patientId], references: [id])
+  doctor       Doctor   @relation(fields: [doctorId], references: [id])
   MedicalRecord MedicalRecord?
 
   @@index([patientId, date])
@@ -74,20 +72,19 @@ model Appointment {
 }
 
 model MedicalRecord {
-  id            String   @id @default(cuid())
-  appointmentId String   @unique
+  id            String     @id @default(cuid())
+  appointmentId String     @unique
   patientId     String
   doctorId      String
   diagnosis     String?
   prescription  String?
-  attachments   String[] // file paths (stored in Docker volume)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  attachments   String[]
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
 
-  // Relations
-  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
-  patient     User        @relation("PatientMedicalRecords", fields: [patientId], references: [id])
-  doctor      Doctor      @relation(fields: [doctorId], references: [id])
+  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  patient       User        @relation("PatientMedicalRecords", fields: [patientId], references: [id])
+  doctor        Doctor      @relation(fields: [doctorId], references: [id])
 
   @@index([patientId])
   @@index([doctorId])
@@ -98,17 +95,30 @@ model AuditLog {
   actorUserId String?
   entity      String
   entityId    String?
-  action      String // create|update|delete|login|logout|...
+  action      String
   ip          String?
   userAgent   String?
   before      Json?
   after       Json?
   createdAt   DateTime @default(now())
 
-  // Relations
-  actor User? @relation("UserAuditActor", fields: [actorUserId], references: [id])
+  actor       User?    @relation("UserAuditActor", fields: [actorUserId], references: [id])
 
   @@index([entity])
   @@index([entityId])
   @@index([createdAt])
+}
+
+model Schedule {
+  id        String   @id @default(cuid())
+  doctorId  String
+  date      DateTime
+  startTime String
+  endTime   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  doctor    Doctor   @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@index([doctorId, date])
 }

@@ -1,76 +1,129 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useMemo } from 'react';
+import { User, AuthState, LoginRequest, RegisterRequest } from '@/types';
+import { apiClient } from '@/lib/api';
+import toast from 'react-hot-toast';
 
-type User = { id: string; name: string; email: string; role: 'superadmin'|'admin'|'doctor'|'patient' } | null;
-
-type AuthCtx = {
-  user: User;
-  loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  register: (name: string, email: string, password: string, role?: string) => Promise<void>;
+interface AuthContextType extends AuthState {
+  login: (credentials: LoginRequest) => Promise<void>;
+  register: (userData: RegisterRequest) => Promise<void>;
   logout: () => Promise<void>;
-};
+  refreshUser: () => Promise<void>;
+}
 
-const Ctx = createContext<AuthCtx | undefined>(undefined);
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8080/api/v1';
+export function AuthProvider({ children }: Readonly<{ children: React.ReactNode }>) {
+  const [user, setUser] = useState<User | undefined>(undefined);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | undefined>(undefined);
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User>(null);
-  const [loading, setLoading] = useState(true);
-
-  async function refreshMe() {
+  const refreshUser = async () => {
     try {
-      const res = await fetch(`${API}/auth/me`, { credentials: 'include' });
-      if (res.ok) setUser(await res.json());
-      else setUser(null);
+      setIsLoading(true);
+      setError(undefined);
+      
+      const response = await apiClient.getProfile();
+      if (response.success && response.data) {
+        setUser(response.data);
+      } else {
+        setUser(undefined);
+      }
+    } catch {
+      // Silently handle auth errors on refresh
+      setUser(undefined);
+      setError(undefined);
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
-  }
-
-  useEffect(() => { refreshMe(); }, []);
-
-  const login = async (email: string, password: string) => {
-    const res = await fetch(`${API}/auth/login`, {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password })
-    });
-    if (!res.ok) {
-      const msg = await res.text();
-      throw new Error(msg || 'Login failed');
-    }
-    await refreshMe();
   };
 
-  const register = async (name: string, email: string, password: string, role: string = 'patient') => {
-    const res = await fetch(`${API}/auth/register`, {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, email, password, role })
-    });
-    if (!res.ok) throw new Error(await res.text());
-    await refreshMe();
+  useEffect(() => {
+    refreshUser();
+  }, []);
+
+  const login = async (credentials: LoginRequest) => {
+    try {
+      setIsLoading(true);
+      setError(undefined);
+
+      const response = await apiClient.login(credentials);
+      
+      if (response.success && response.data) {
+        setUser(response.data);
+        toast.success(response.message || 'Login successful!');
+      } else {
+        throw new Error(response.message || 'Login failed');
+      }
+    } catch (err: any) {
+      const errorMessage = err.response?.data?.message || err.message || 'Login failed';
+      setError(errorMessage);
+      throw new Error(errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const register = async (userData: RegisterRequest) => {
+    try {
+      setIsLoading(true);
+      setError(undefined);
+
+      const response = await apiClient.register(userData);
+      
+      if (response.success && response.data) {
+        setUser(response.data);
+        toast.success(response.message || 'Registration successful!');
+      } else {
+        throw new Error(response.message || 'Registration failed');
+      }
+    } catch (err: any) {
+      const errorMessage = err.response?.data?.message || err.message || 'Registration failed';
+      setError(errorMessage);
+      throw new Error(errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const logout = async () => {
-    await fetch(`${API}/auth/logout`, { method: 'POST', credentials: 'include' });
-    setUser(null);
+    try {
+      setIsLoading(true);
+      await apiClient.logout();
+      setUser(undefined);
+      toast.success('Logged out successfully');
+    } catch (err: any) {
+      // Even if logout fails on server, clear local state
+      setUser(undefined);
+      console.error('Logout error:', err);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
+  const value: AuthContextType = useMemo(() => ({
+    user,
+    isAuthenticated: !!user,
+    isLoading,
+    error,
+    login,
+    register,
+    logout,
+    refreshUser,
+  }), [user, isLoading, error]);
+
   return (
-    <Ctx.Provider value={{ user, loading, login, register, logout }}>
+    <AuthContext.Provider value={value}>
       {children}
-    </Ctx.Provider>
+    </AuthContext.Provider>
   );
 }
 
 export function useAuth() {
-  const v = useContext(Ctx);
-  if (!v) throw new Error('useAuth must be used within AuthProvider');
-  return v;
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within AuthProvider');
+  }
+  return context;
 }

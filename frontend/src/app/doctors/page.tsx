@@ -1,75 +1,51 @@
-"use client";
+'use client';
 
-import React, { useEffect, useState } from 'react';
-import Link from 'next/link';
-import { api } from '@/lib/api';
-import { useAuth } from '@/context/AuthContext';
+import { useEffect, useState } from 'react';
 
-interface Doctor {
+type Doctor = {
   id: string;
+  fullName: string;
   specialty: string;
   location: string;
-  bio?: string | null;
   profilePicture?: string | null;
-  user?: {
-    id: string;
-    fullName: string;
-    email: string;
-    role: string;
-  };
-}
+};
+
+const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8080/api/v1';
 
 export default function DoctorsPage() {
-  const [doctors, setDoctors] = useState<Doctor[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const { user } = useAuth();
+  const [items, setItems] = useState<Doctor[]>([]);
+  const [loading,setLoading] = useState(true);
 
   useEffect(() => {
-    async function load() {
-      try {
-        const data = await api<Doctor[]>('/doctors');
-        setDoctors(data);
-      } catch (err: any) {
-        setError(err.message || 'Failed to load doctors');
-      } finally {
-        setLoading(false);
-      }
-    }
-    void load();
+    (async () => {
+      setLoading(true);
+      const res = await fetch(`${API}/doctors`, { credentials: 'include' });
+      setItems(res.ok ? await res.json() : []);
+      setLoading(false);
+    })();
   }, []);
 
-  if (loading) {
-    return <main className="p-8"><p>Loading doctors...</p></main>;
-  }
-  if (error) {
-    return <main className="p-8"><p>{error}</p></main>;
-  }
+  if (loading) return <p>Loading…</p>;
 
   return (
-    <main className="p-8 max-w-3xl mx-auto">
-      <h1 className="text-2xl font-bold mb-4">Doctors</h1>
-      {/* Show create button if user is admin or superadmin */}
-      {user && (user.role === 'admin' || user.role === 'superadmin') && (
-        <div className="mb-4">
-          <Link href="/doctors/new" className="bg-blue-600 text-white px-4 py-2 rounded">
-            New Doctor
-          </Link>
+    <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+      {items.map(d => (
+        <div key={d.id} className="card">
+          <div className="flex items-center gap-4">
+            <img
+              src={d.profilePicture || 'https://placehold.co/96x96'}
+              alt={d.fullName}
+              className="size-20 rounded-full object-cover"
+            />
+            <div>
+              <h3 className="text-lg font-semibold">{d.fullName}</h3>
+              <p className="text-sm text-gray-600">{d.specialty}</p>
+              <p className="text-sm text-gray-600">{d.location}</p>
+            </div>
+          </div>
         </div>
-      )}
-      {doctors.length === 0 ? (
-        <p>No doctors found.</p>
-      ) : (
-        <ul className="space-y-2">
-          {doctors.map((doc) => (
-            <li key={doc.id} className="border rounded p-4 hover:bg-gray-50">
-              <Link href={`/doctors/${doc.id}`}>{doc.user?.fullName || 'Unnamed Doctor'}</Link>{' '}
-              <span className="text-sm text-gray-600">({doc.specialty})</span>
-              <div className="text-xs text-gray-500">{doc.location}</div>
-            </li>
-          ))}
-        </ul>
-      )}
-    </main>
+      ))}
+      {items.length === 0 && <p>No doctors yet.</p>}
+    </div>
   );
 }

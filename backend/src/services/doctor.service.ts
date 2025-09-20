@@ -1,9 +1,8 @@
-import { PrismaClient, Role } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 import { createUser } from './auth.service';
 
 const prisma = new PrismaClient();
 
-// Create a new doctor.
 export async function createDoctor(options: {
   email: string;
   fullName: string;
@@ -19,7 +18,6 @@ export async function createDoctor(options: {
     password: options.password,
     role: 'doctor'
   });
-
   const doctor = await prisma.doctor.create({
     data: {
       userId: user.id,
@@ -33,7 +31,6 @@ export async function createDoctor(options: {
   return doctor;
 }
 
-// Retrieve a paginated list of doctors.
 export async function getDoctors(params: {
   specialty?: string;
   location?: string;
@@ -53,25 +50,13 @@ export async function getDoctors(params: {
   });
 }
 
-// Get a single doctor by their ID
 export async function getDoctorById(id: string) {
-  return prisma.doctor.findUnique({
-    where: { id },
-    include: { user: true }
-  });
+  return prisma.doctor.findUnique({ where: { id }, include: { user: true } });
 }
 
-// Update a doctor.
 export async function updateDoctor(
   id: string,
-  updates: {
-    specialty?: string;
-    location?: string;
-    bio?: string | null;
-    profilePicture?: string | null;
-    fullName?: string;
-    email?: string;
-  }
+  updates: { specialty?: string; location?: string; bio?: string | null; profilePicture?: string | null; fullName?: string; email?: string; }
 ) {
   const doctor = await prisma.doctor.findUnique({ where: { id }, include: { user: true } });
   if (!doctor) return null;
@@ -89,12 +74,8 @@ export async function updateDoctor(
     prisma.doctor.update({
       where: { id },
       data: {
-        ...(doctorUpdates.specialty !== undefined
-          ? { specialty: doctorUpdates.specialty }
-          : {}),
-        ...(doctorUpdates.location !== undefined
-          ? { location: doctorUpdates.location }
-          : {}),
+        ...(doctorUpdates.specialty !== undefined ? { specialty: doctorUpdates.specialty } : {}),
+        ...(doctorUpdates.location !== undefined ? { location: doctorUpdates.location } : {}),
         bio: doctorUpdates.bio ?? undefined,
         profilePicture: doctorUpdates.profilePicture ?? undefined
       }
@@ -103,7 +84,6 @@ export async function updateDoctor(
   return { ...updatedDoctor, user: updatedUser };
 }
 
-// Delete a doctor record.
 export async function deleteDoctor(id: string) {
   const doctor = await prisma.doctor.findUnique({ where: { id } });
   if (!doctor) return null;

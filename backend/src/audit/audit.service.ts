@@ -1,19 +1,17 @@
-import { PrismaClient, AuditLog } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
-export type AuditParams = {
-  actorUserId?: string | null;
+export async function writeAudit(entry: {
+  actorUserId?: string;
   entity: string;
-  entityId?: string | null;
-  action: 'create'|'update'|'delete'|'login'|'logout';
-  ip?: string | null;
-  userAgent?: string | null;
-  before?: Record<string, unknown> | null;
-  after?: Record<string, unknown> | null;
-};
-
-export async function writeAudit(entry: AuditParams): Promise<AuditLog> {
-  return prisma.auditLog.create({
+  entityId?: string;
+  action: string;
+  ip?: string;
+  userAgent?: string;
+  before?: any;
+  after?: any;
+}) {
+  await prisma.auditLog.create({
     data: {
       actorUserId: entry.actorUserId ?? null,
       entity: entry.entity,

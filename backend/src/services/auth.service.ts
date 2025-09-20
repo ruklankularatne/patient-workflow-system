@@ -1,25 +1,31 @@
 import { PrismaClient, Role } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+
 const prisma = new PrismaClient();
 
 export async function createUser(opts: {
-  email: string; fullName: string; password: string; role?: Role;
+  email: string;
+  fullName: string;
+  password: string;
+  role: keyof typeof Role | 'superadmin' | 'admin' | 'doctor' | 'patient';
 }) {
   const passwordHash = await bcrypt.hash(opts.password, 12);
   return prisma.user.create({
     data: {
       email: opts.email,
-      passwordHash,
       fullName: opts.fullName,
-      role: opts.role ?? 'patient'
+      passwordHash,
+      role: opts.role as any
     }
   });
 }
 
-export async function verifyUser(email: string, password: string) {
-  const user = await prisma.user.findUnique({ where: { email } });
-  if (!user || !user.isActive) return null;
-  const ok = await bcrypt.compare(password, user.passwordHash);
-  if (!ok) return null;
-  return user;
+export async function findUserByEmail(email: string) {
+  return prisma.user.findUnique({ where: { email } });
+}
+
+export async function validatePassword(userId: string, password: string) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) return false;
+  return bcrypt.compare(password, user.passwordHash);
 }

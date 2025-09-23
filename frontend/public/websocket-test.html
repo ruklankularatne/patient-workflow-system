@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebSocket Test</title>
+</head>
+<body>
+    <h1>WebSocket Connection Test</h1>
+    <div id="log"></div>
+    
+    <script>
+// Simple WebSocket test client
+const log = document.getElementById('log');
+function addLog(message) {
+  const p = document.createElement('p');
+  p.textContent = `${new Date().toLocaleTimeString()}: ${message}`;
+  log.appendChild(p);
+}
+
+const ws = new WebSocket('ws://localhost:8080/ws/appointments');
+
+ws.onopen = () => {
+  addLog('WebSocket connected successfully!');
+  
+  // Subscribe to doctor updates
+  ws.send(JSON.stringify({
+    type: 'subscribe_to_doctor',
+    doctorId: 'test-doctor-123'
+  }));
+};
+
+ws.onmessage = (event) => {
+  const message = JSON.parse(event.data);
+  addLog('Received message: ' + JSON.stringify(message, null, 2));
+};
+
+ws.onclose = (event) => {
+  addLog('WebSocket disconnected: ' + event.code + ' ' + event.reason);
+};
+
+ws.onerror = (error) => {
+  addLog('WebSocket error: ' + error);
+};
+
+// Test sending a message after 2 seconds
+setTimeout(() => {
+  if (ws.readyState === WebSocket.OPEN) {
+    addLog('📤 Sending test message...');
+    ws.send(JSON.stringify({
+      type: 'test',
+      message: 'Hello WebSocket!'
+    }));
+  }
+}, 2000);
+    </script>
+</body>
+</html>

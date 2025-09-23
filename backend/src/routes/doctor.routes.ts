@@ -1,19 +1,13 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth, requireRole } from '../middlewares/auth';
+import { uploadProfilePicture } from '../middlewares/fileUpload';
 import { FEATURES } from '../configs/features';
-import {
-  createDoctor,
-  getDoctors,
-  getDoctorById,
-  updateDoctor,
-  deleteDoctor
-} from '../services/doctor.service';
+import { createDoctor, getDoctors, getDoctorById, updateDoctor, deleteDoctor } from '../services/doctor.service';
 import { writeAudit } from '../audit/audit.service';
 
 const router = Router();
 
-// Schema definitions for validation
 const CreateDoctorSchema = z.object({
   email: z.string().email(),
   fullName: z.string().min(1),
@@ -33,109 +27,125 @@ const UpdateDoctorSchema = z.object({
   email: z.string().email().optional()
 });
 
-// GET /doctors - list doctors with optional filters
 router.get('/', async (req, res, next) => {
   try {
-    const { specialty, location, skip, take } = req.query;
+    const { specialty, location, search, skip, take } = req.query;
     const doctors = await getDoctors({
       specialty: specialty as string | undefined,
       location: location as string | undefined,
+      search: search as string | undefined,
       skip: skip ? Number(skip) : undefined,
       take: take ? Number(take) : undefined
     });
-    return res.json(doctors);
-  } catch (err) {
-    return next(err);
-  }
+    return res.json({
+      success: true,
+      data: doctors
+    });
+  } catch (err) { return next(err); }
 });
 
-// GET /doctors/:id - get doctor by id
 router.get('/:id', async (req, res, next) => {
   try {
-    const { id } = req.params;
-    const doctor = await getDoctorById(id);
-    if (!doctor) return res.status(404).json({ message: 'Doctor not found' });
-    return res.json(doctor);
-  } catch (err) {
-    return next(err);
-  }
+    const doctor = await getDoctorById(req.params.id);
+    if (!doctor) return res.status(404).json({ 
+      success: false, 
+      message: 'Doctor not found' 
+    });
+    return res.json({
+      success: true,
+      data: doctor
+    });
+  } catch (err) { return next(err); }
 });
 
-// POST /doctors - create a new doctor (admin/superadmin only)
 router.post('/', requireAuth, requireRole('admin', 'superadmin'), async (req, res, next) => {
   try {
     const data = CreateDoctorSchema.parse(req.body);
     const doctor = await createDoctor(data);
-    await writeAudit({
-      actorUserId: req.user?.sub,
-      entity: 'Doctor',
-      entityId: doctor.id,
-      action: 'create',
-      ip: req.ip,
-      userAgent: req.get('user-agent') || undefined,
-      before: null,
-      after: { doctorId: doctor.id, userId: doctor.userId }
+    await writeAudit({ actorUserId: (req as any).user?.sub, entity: 'Doctor', entityId: doctor.id, action: 'create', ip: req.ip, userAgent: req.get('user-agent') || undefined, before: null, after: { doctorId: doctor.id, userId: doctor.userId } });
+    return res.status(201).json({
+      success: true,
+      data: doctor
     });
-    return res.status(201).json(doctor);
-  } catch (err) {
-    return next(err);
-  }
+  } catch (err) { return next(err); }
 });
 
-// PUT /doctors/:id - update doctor (doctor or admin/superadmin)
 router.put('/:id', requireAuth, requireRole('admin', 'doctor', 'superadmin'), async (req, res, next) => {
   try {
-    const { id } = req.params;
     const updates = UpdateDoctorSchema.parse(req.body);
-    const doctor = await getDoctorById(id);
-    if (!doctor) return res.status(404).json({ message: 'Doctor not found' });
+    const doctor = await getDoctorById(req.params.id);
+    if (!doctor) return res.status(404).json({ success: false, message: 'Doctor not found' });
+    if ((req as any).user?.role === 'doctor') {
+      if (!FEATURES.ALLOW_DOCTOR_PROFILE_UPDATE) return res.status(403).json({ success: false, message: 'Doctor profile editing is disabled' });
+      if ((req as any).user.sub !== doctor.userId) return res.status(403).json({ success: false, message: 'You can only edit your own profile' });
+    }
+    const before = { ...doctor };
+    const updated = await updateDoctor(req.params.id, updates);
+    await writeAudit({ actorUserId: (req as any).user?.sub, entity: 'Doctor', entityId: req.params.id, action: 'update', ip: req.ip, userAgent: req.get('user-agent') || undefined, before, after: updated ?? undefined });
+    return res.json({ success: true, data: updated });
+  } catch (err) { return next(err); }
+});
 
-    if (req.user?.role === 'doctor') {
-      if (!FEATURES.ALLOW_DOCTOR_PROFILE_UPDATE) {
-        return res.status(403).json({ message: 'Doctor profile editing is disabled' });
-      }
-      if (req.user.sub !== doctor.userId) {
-        return res.status(403).json({ message: 'You can only edit your own profile' });
+router.delete('/:id', requireAuth, requireRole('admin', 'superadmin'), async (req, res, next) => {
+  try {
+    const doctor = await getDoctorById(req.params.id);
+    if (!doctor) return res.status(404).json({ message: 'Doctor not found' });
+    const before = { ...doctor };
+    await deleteDoctor(req.params.id);
+    await writeAudit({ actorUserId: (req as any).user?.sub, entity: 'Doctor', entityId: req.params.id, action: 'delete', ip: req.ip, userAgent: req.get('user-agent') || undefined, before, after: null });
+    return res.status(204).send();
+  } catch (err) { return next(err); }
+});
+
+// Upload profile picture for doctor
+router.post('/:id/profile-picture', requireAuth, requireRole('admin', 'doctor', 'superadmin'), uploadProfilePicture.single('profilePicture'), async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'No file uploaded'
+      });
+    }
+
+    const doctor = await getDoctorById(req.params.id);
+    if (!doctor) {
+      return res.status(404).json({
+        success: false,
+        message: 'Doctor not found'
+      });
+    }
+
+    // Check permissions for doctor role
+    if ((req as any).user?.role === 'doctor') {
+      if ((req as any).user.sub !== doctor.userId) {
+        return res.status(403).json({
+          success: false,
+          message: 'You can only update your own profile picture'
+        });
       }
     }
-    // Update
+
     const before = { ...doctor };
-    const updated = await updateDoctor(id, updates);
+    const updated = await updateDoctor(req.params.id, {
+      profilePicture: req.file.filename
+    });
+
     await writeAudit({
-      actorUserId: req.user?.sub,
+      actorUserId: (req as any).user?.sub,
       entity: 'Doctor',
-      entityId: id,
+      entityId: req.params.id,
       action: 'update',
       ip: req.ip,
       userAgent: req.get('user-agent') || undefined,
       before,
-      after: updated ? { ...updated } : undefined
+      after: updated
     });
-    return res.json(updated);
-  } catch (err) {
-    return next(err);
-  }
-});
 
-// DELETE /doctors/:id - delete doctor (admin/superadmin only)
-router.delete('/:id', requireAuth, requireRole('admin', 'superadmin'), async (req, res, next) => {
-  try {
-    const { id } = req.params;
-    const doctor = await getDoctorById(id);
-    if (!doctor) return res.status(404).json({ message: 'Doctor not found' });
-    const before = { ...doctor };
-    await deleteDoctor(id);
-    await writeAudit({
-      actorUserId: req.user?.sub,
-      entity: 'Doctor',
-      entityId: id,
-      action: 'delete',
-      ip: req.ip,
-      userAgent: req.get('user-agent') || undefined,
-      before,
-      after: null
+    return res.json({
+      success: true,
+      data: updated,
+      message: 'Profile picture uploaded successfully'
     });
-    return res.status(204).send();
   } catch (err) {
     return next(err);
   }

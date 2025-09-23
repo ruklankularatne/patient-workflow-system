@@ -1,27 +1,35 @@
-import logger from 'jet-logger';
+import 'dotenv/config';
+import http from 'http';
+import app from './app.js';
+import { logger } from './utils/logger.js';
+import { webSocketService } from './services/websocket.service.js';
 
-import ENV from '@src/common/constants/ENV';
-import server from './server';
+const port = Number(process.env.PORT || 8080);
 
+// Create HTTP server
+const server = http.createServer(app);
 
-/******************************************************************************
-                                Constants
-******************************************************************************/
+// Initialize WebSocket service
+webSocketService.initialize(server);
 
-const SERVER_START_MSG = (
-  'Express server started on port: ' + ENV.Port.toString()
-);
+server.listen(port, () => {
+  logger.info(`Server started on port ${port}`);
+  logger.info(`API docs available at http://localhost:${port}/docs`);
+  logger.info(`WebSocket server available at ws://localhost:${port}/ws/appointments`);
+});
 
+process.on('SIGTERM', () => {
+  logger.info('SIGTERM received, shutting down gracefully');
+  server.close(() => {
+    logger.info('Process terminated');
+    process.exit(0);
+  });
+});
 
-/******************************************************************************
-                                  Run
-******************************************************************************/
-
-// Start the server
-server.listen(ENV.Port, err => {
-  if (!!err) {
-    logger.err(err.message);
-  } else {
-    logger.info(SERVER_START_MSG);
-  }
+process.on('SIGINT', () => {
+  logger.info('SIGINT received, shutting down gracefully');
+  server.close(() => {
+    logger.info('Process terminated');
+    process.exit(0);
+  });
 });

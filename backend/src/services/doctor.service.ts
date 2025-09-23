@@ -34,14 +34,24 @@ export async function createDoctor(options: {
 export async function getDoctors(params: {
   specialty?: string;
   location?: string;
+  search?: string;
   skip?: number;
   take?: number;
 } = {}) {
-  const { specialty, location, skip, take } = params;
+  const { specialty, location, search, skip, take } = params;
   return prisma.doctor.findMany({
     where: {
-      ...(specialty ? { specialty: { contains: specialty, mode: 'insensitive' } } : {}),
-      ...(location ? { location: { contains: location, mode: 'insensitive' } } : {})
+      AND: [
+        specialty ? { specialty: { contains: specialty, mode: 'insensitive' } } : {},
+        location ? { location: { contains: location, mode: 'insensitive' } } : {},
+        search ? {
+          OR: [
+            { user: { fullName: { contains: search, mode: 'insensitive' } } },
+            { specialty: { contains: search, mode: 'insensitive' } },
+            { location: { contains: search, mode: 'insensitive' } }
+          ]
+        } : {}
+      ]
     },
     include: { user: true },
     skip,

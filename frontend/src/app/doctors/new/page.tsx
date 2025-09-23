@@ -1,8 +1,9 @@
 "use client";
 import React, { useState } from 'react';
-import { api } from '@/lib/api';
+import { apiClient } from '@/lib/api';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
+import { getProfilePictureUrl, isValidImageFilename } from '@/utils/profilePictures';
 
 export default function NewDoctorPage() {
   const router = useRouter();
@@ -20,7 +21,10 @@ export default function NewDoctorPage() {
       const body:any = { ...form };
       if (!body.bio) delete body.bio;
       if (!body.profilePicture) delete body.profilePicture;
-      await api('/doctors', { method: 'POST', body: JSON.stringify(body) });
+      const response = await apiClient.createDoctor(body);
+      if (!response.success) {
+        throw new Error(response.message || 'Failed to create doctor');
+      }
       router.push('/doctors');
     } catch (e:any) { setErr(e.message); }
   };
@@ -36,7 +40,35 @@ export default function NewDoctorPage() {
         <input className="input" placeholder="Specialty" value={form.specialty} onChange={e=>setForm({...form, specialty:e.target.value})} required />
         <input className="input" placeholder="Location" value={form.location} onChange={e=>setForm({...form, location:e.target.value})} required />
         <textarea className="textarea" placeholder="Bio (optional)" value={form.bio} onChange={e=>setForm({...form, bio:e.target.value})} />
-        <input className="input" placeholder="Profile Picture URL (optional)" value={form.profilePicture} onChange={e=>setForm({...form, profilePicture:e.target.value})} />
+        <div>
+          <input 
+            className="input" 
+            placeholder="Profile Picture Filename (e.g., doctor1.jpg)" 
+            value={form.profilePicture} 
+            onChange={e=>setForm({...form, profilePicture:e.target.value})} 
+          />
+          <p className="text-sm text-gray-600 mt-1">
+            Enter just the filename. Image must be placed in backend uploads/profile-pictures/ directory.
+          </p>
+          {form.profilePicture && !isValidImageFilename(form.profilePicture) && (
+            <p className="text-sm text-red-600 mt-1">
+              Please use a valid image filename (.jpg, .jpeg, .png, .webp, .svg)
+            </p>
+          )}
+          {form.profilePicture && isValidImageFilename(form.profilePicture) && (
+            <div className="mt-2">
+              <p className="text-sm text-gray-600">Preview:</p>
+              <img 
+                src={getProfilePictureUrl(form.profilePicture) || ''} 
+                alt="Profile preview" 
+                className="w-16 h-16 rounded-full object-cover border mt-1"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).style.display = 'none';
+                }}
+              />
+            </div>
+          )}
+        </div>
         <button className="btn" type="submit">Create</button>
       </form>
     </main>

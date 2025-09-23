@@ -2,8 +2,10 @@
 
 import React, { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { api } from '@/lib/api';
+import { apiClient } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
+import { getProfilePictureUrl, getProfilePictureFilename, isValidImageFilename, uploadProfilePicture } from '@/utils/profilePictures';
+import toast from 'react-hot-toast';
 
 interface DoctorDetail {
   id: string;
@@ -34,12 +36,12 @@ export default function EditDoctorPage() {
     email: '',
     specialty: '',
     location: '',
-    bio: '',
-    profilePicture: ''
+    bio: ''
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   // Fetch doctor data 
   useEffect(() => {
@@ -47,15 +49,18 @@ export default function EditDoctorPage() {
       setLoading(true);
       setError(null);
       try {
-        const data = await api<DoctorDetail>(`/doctors/${id}`);
+        const response = await apiClient.getDoctor(id);
+        const data = response.data;
+        if (!response.success || !data) {
+          throw new Error(response.message || 'Failed to load doctor');
+        }
         setDoctor(data);
         setForm({
           fullName: data.user?.fullName || '',
           email: data.user?.email || '',
           specialty: data.specialty || '',
           location: data.location || '',
-          bio: data.bio ?? '',
-          profilePicture: data.profilePicture ?? ''
+          bio: data.bio ?? ''
         });
       } catch (err: any) {
         setError(err.message || 'Failed to load doctor');
@@ -70,7 +75,7 @@ export default function EditDoctorPage() {
   const authorised = user &&
     (user.role === 'superadmin' ||
       user.role === 'admin' ||
-      (user.role === 'doctor' && doctor && doctor.user?.id === user.userId));
+      (user.role === 'doctor' && doctor && doctor.user?.id === user.id));
 
   // If not authorised, show message
   if (!loading && !authorised) {
@@ -88,6 +93,42 @@ export default function EditDoctorPage() {
     setForm((prev) => ({ ...prev, [name]: value }));
   }
 
+  // Handle profile picture upload
+  async function handleProfilePictureUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !id) return;
+
+    // Validate file type
+    if (!isValidImageFilename(file.name)) {
+      toast.error('Please select a valid image file (.jpg, .jpeg, .png, .webp, .svg)');
+      return;
+    }
+
+    // Validate file size (5MB max)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('File size must be less than 5MB');
+      return;
+    }
+
+    setUploadingImage(true);
+    try {
+      const result = await uploadProfilePicture(id, file);
+      if (result.success) {
+        toast.success(result.message || 'Profile picture uploaded successfully');
+        // Refresh the page to show the new profile picture
+        window.location.reload();
+      } else {
+        toast.error(result.message || 'Failed to upload profile picture');
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to upload profile picture');
+    } finally {
+      setUploadingImage(false);
+      // Reset the file input
+      e.target.value = '';
+    }
+  }
+
   // Submit the update
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -101,11 +142,10 @@ export default function EditDoctorPage() {
       if (form.specialty.trim()) body.specialty = form.specialty.trim();
       if (form.location.trim()) body.location = form.location.trim();
       body.bio = form.bio.trim() || null;
-      body.profilePicture = form.profilePicture.trim() || null;
-      await api(`/doctors/${id}`, {
-        method: 'PUT',
-        body: JSON.stringify(body)
-      });
+      const response = await apiClient.updateDoctor(id, body);
+      if (!response.success) {
+        throw new Error(response.message || 'Failed to update doctor');
+      }
       router.push(`/doctors/${id}`);
     } catch (err: any) {
       setError(err.message || 'Failed to update doctor');
@@ -180,17 +220,43 @@ export default function EditDoctorPage() {
             className="mt-1 w-full border rounded p-2 h-24"
           />
         </div>
-        <div>
-          <label htmlFor="profilePicture" className="block font-medium">Profile picture URL</label>
-          <input
-            id="profilePicture"
-            name="profilePicture"
-            type="text"
-            value={form.profilePicture}
-            onChange={handleChange}
-            className="mt-1 w-full border rounded p-2"
-          />
-        </div>
+        {(user?.role === 'admin' || user?.role === 'superadmin' || user?.role === 'doctor') && (
+          <div>
+            <label className="block font-medium mb-2">Profile Picture</label>
+            
+            {/* File Upload */}
+            <div className="mb-4">
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleProfilePictureUpload}
+                disabled={uploadingImage}
+                className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 disabled:opacity-50"
+              />
+              <p className="text-sm text-gray-600 mt-1">
+                Select an image file to upload (max 5MB). Supported formats: JPG, PNG, WebP, SVG
+              </p>
+              {uploadingImage && (
+                <p className="text-sm text-blue-600 mt-1">Uploading...</p>
+              )}
+            </div>
+
+            {/* Preview */}
+            {doctor?.profilePicture && isValidImageFilename(doctor.profilePicture) && (
+              <div className="mt-4">
+                <p className="text-sm text-gray-600 mb-2">Current profile picture:</p>
+                <img 
+                  src={getProfilePictureUrl(doctor.profilePicture) || ''} 
+                  alt="Profile preview" 
+                  className="w-20 h-20 rounded-full object-cover border"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).style.display = 'none';
+                  }}
+                />
+              </div>
+            )}
+          </div>
+        )}
         {error && <p className="text-red-600">{error}</p>}
         <button
           type="submit"

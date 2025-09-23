@@ -16,20 +16,21 @@ export default function Navbar() {
         <nav className="flex items-center gap-4">
           {user && (
             <>
-              <Link href="/doctors" className="hover:underline text-gray-700">
-                Doctors
-              </Link>
-              <Link href="/schedules" className="hover:underline text-gray-700">
-                Schedules
-              </Link>
               {user.role === 'patient' && (
-                <Link href="/appointments" className="hover:underline text-gray-700">
-                  My Appointments
+                <>
+                  <Link href="/profile" className="hover:underline text-gray-700">
+                    My Profile
+                  </Link>
+                </>
+              )}
+              {user.role === 'doctor' && (
+                <Link href="/dashboard" className="hover:underline text-gray-700">
+                  Doctor Dashboard
                 </Link>
               )}
-              {(user.role === 'doctor' || user.role === 'admin' || user.role === 'superadmin') && (
+              {user.role === 'admin' && (
                 <Link href="/dashboard" className="hover:underline text-gray-700">
-                  Dashboard
+                  Admin Dashboard
                 </Link>
               )}
             </>
@@ -39,15 +40,15 @@ export default function Navbar() {
             <>
               <Link 
                 href="/login" 
-                className="px-4 py-2 text-blue-600 hover:text-blue-800 transition-colors"
+                className="px-4 py-2 text-blue-600 border border-blue-600 rounded-md hover:bg-blue-50 transition-colors"
               >
                 Login
               </Link>
               <Link 
                 href="/register" 
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                className="px-4 py-2 bg-white text-blue-600 border border-blue-600 rounded-md hover:bg-blue-50 transition-colors"
               >
-                Sign up
+                Create Account
               </Link>
             </>
           )}

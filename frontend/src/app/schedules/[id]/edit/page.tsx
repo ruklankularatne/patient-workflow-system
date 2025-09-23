@@ -1,6 +1,6 @@
 "use client";
 import React, { useEffect, useState } from 'react';
-import { api } from '@/lib/api';
+import { apiClient } from '@/lib/api';
 import { useRouter, useParams } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 
@@ -22,12 +22,17 @@ export default function EditSchedulePage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api<ScheduleDetail>(`/schedules/${id}`).then(s => {
-      setSchedule(s);
-      setDate(s.date.split('T')[0]);
-      setStartTime(s.startTime);
-      setEndTime(s.endTime);
-    }).catch(e=>setErr(e.message)).finally(()=>setLoading(false));
+    apiClient.getSchedules(id).then((response: any) => {
+      if (response.success && response.data && response.data.length > 0) {
+        const s = response.data[0];
+        setSchedule(s);
+        setDate(s.date.split('T')[0]);
+        setStartTime(s.startTime);
+        setEndTime(s.endTime);
+      } else {
+        setErr('Schedule not found');
+      }
+    }).catch((e: any) => setErr(e.message)).finally(() => setLoading(false));
   }, [id]);
 
   if (!user || (user.role!=='admin' && user.role!=='doctor' && user.role!=='superadmin')) {
@@ -38,9 +43,12 @@ export default function EditSchedulePage() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault(); setErr(null);
     try {
-      await api(`/schedules/${id}`, { method: 'PUT', body: JSON.stringify({ date, startTime, endTime }) });
+      const response = await apiClient.updateSchedule(id, { date, startTime, endTime });
+      if (!response.success) {
+        throw new Error(response.message || 'Failed to update schedule');
+      }
       router.push('/schedules');
-    } catch (e:any) { setErr(e.message); }
+    } catch (e: any) { setErr(e.message); }
   };
 
   if (loading) return <main className="container"><p>Loading…</p></main>;

@@ -42,8 +42,8 @@ export async function authenticateToken(req: Request, res: Response, next: NextF
     const user = await prisma.user.findUnique({
       where: { id: payload.userId },
       include: {
-        Doctor: true,
-      },
+        doctor: true // Include doctor relation if user is a doctor
+      }
     });
 
     if (!user) {
@@ -68,7 +68,7 @@ export async function authenticateToken(req: Request, res: Response, next: NextF
       email: user.email,
       fullName: user.fullName,
       role: user.role,
-      doctorId: user.Doctor?.id,
+      doctorId: user.doctor?.id, // Include doctor ID if user is a doctor
     };
 
     logger.info('User authenticated successfully');

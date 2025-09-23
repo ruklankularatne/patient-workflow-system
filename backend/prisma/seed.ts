@@ -3,47 +3,13 @@ import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
-const specialties = [
-  'Family Medicine','Internal Medicine','Pediatrics','Cardiology',
-  'Dermatology','Orthopedics','Neurology','Psychiatry'
-];
-
-const cities = [
-  'New York, NY','Los Angeles, CA','Chicago, IL','Houston, TX','Phoenix, AZ',
-  'Philadelphia, PA','San Antonio, TX','San Diego, CA','Dallas, TX','San Jose, CA'
-];
-
-const doctorPics = [
-  'https://placehold.co/192x192?text=Dr+1',
-  'https://placehold.co/192x192?text=Dr+2',
-  'https://placehold.co/192x192?text=Dr+3',
-  'https://placehold.co/192x192?text=Dr+4',
-  'https://placehold.co/192x192?text=Dr+5',
-  'https://placehold.co/192x192?text=Dr+6'
-];
-
-const doctorNames = [
-  'Dr. Sarah Johnson',
-  'Dr. Michael Chen',
-  'Dr. Emily Rodriguez',
-  'Dr. David Thompson',
-  'Dr. Jennifer Williams',
-  'Dr. Robert Anderson'
-];
-
-const patientNames = [
-  'John Smith',
-  'Maria Garcia',
-  'Robert Johnson',
-  'Lisa Anderson',
-  'James Wilson',
-  'Patricia Brown',
-  'Michael Davis',
-  'Jennifer Martinez'
-];
+const specialties = ['Family Medicine', 'Internal Medicine', 'Cardiology'];
+const cities = ['New York, NY', 'Los Angeles, CA', 'Chicago, IL'];
+const doctorNames = ['Dr. Sarah Johnson', 'Dr. Michael Chen'];
+const patientNames = ['John Smith', 'Maria Garcia', 'Robert Johnson'];
 
 async function main() {
-  console.log('🌱 Starting comprehensive seed process...');
+  console.log('Starting seed process...');
 
   // Clear existing data in reverse dependency order
   await prisma.auditLog.deleteMany();
@@ -53,7 +19,7 @@ async function main() {
   await prisma.doctor.deleteMany();
   await prisma.user.deleteMany();
 
-  console.log('✅ Cleared existing data');
+  console.log('Cleared existing data');
 
   const passwordHash = await bcrypt.hash('P@ssw0rd!', 10);
 
@@ -61,7 +27,7 @@ async function main() {
   const superadmin = await prisma.user.create({
     data: {
       fullName: 'System Administrator',
-      email: 'superadmin@pws.example',
+      email: 'superadmin@test.com',
       passwordHash,
       role: Role.superadmin
     }
@@ -70,13 +36,13 @@ async function main() {
   const admin = await prisma.user.create({
     data: {
       fullName: 'Hospital Administrator',
-      email: 'admin@pws.example',
+      email: 'admin@test.com',
       passwordHash,
       role: Role.admin
     }
   });
 
-  console.log('✅ Created admin users');
+  console.log('Created admin users');
 
   // Patient users
   const patients = await Promise.all(
@@ -84,7 +50,7 @@ async function main() {
       prisma.user.create({
         data: {
           fullName,
-          email: `patient${i + 1}@email.com`,
+          email: `patient${i + 1}@test.com`,
           passwordHash,
           role: Role.patient
         }
@@ -92,7 +58,7 @@ async function main() {
     )
   );
 
-  console.log('✅ Created patient users');
+  console.log('Created patient users');
 
   // Doctor users
   const doctorUsers = await Promise.all(
@@ -100,7 +66,7 @@ async function main() {
       prisma.user.create({
         data: {
           fullName,
-          email: `doctor${i + 1}@pws.example`,
+          email: `doctor${i + 1}@test.com`,
           passwordHash,
           role: Role.doctor
         }
@@ -115,28 +81,26 @@ async function main() {
         data: {
           userId: u.id,
           specialty: specialties[i % specialties.length],
-          bio: 'Board-certified with 10+ years of experience providing evidence-based care.',
-          location: cities[i % cities.length],
-          profilePicture: doctorPics[i % doctorPics.length]
+          bio: 'Board-certified physician with extensive experience.',
+          location: cities[i % cities.length]
         }
       })
     )
   );
 
-  console.log('✅ Created doctor users and profiles');
+  console.log('Created doctor users and profiles');
 
-  // Schedules: Mon–Fri for next 14 days (09:00–12:00 and 14:00–17:00)
+  // Schedules: Mon-Fri for next 7 days (09:00-12:00 and 14:00-17:00)
   const start = new Date();
   start.setHours(0, 0, 0, 0);
 
   for (const d of doctors) {
-    for (let offset = 0; offset < 14; offset++) {
+    for (let offset = 0; offset < 7; offset++) {
       const dt = new Date(start);
       dt.setDate(start.getDate() + offset);
-      const day = dt.getDay(); // 0=Sun … 6=Sat
+      const day = dt.getDay(); // 0=Sun, 6=Sat
       if (day === 0 || day === 6) continue;
 
-      // Make an exact local date @ 00:00:00 to store into DateTime
       const localMidnight = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
 
       await prisma.schedule.createMany({
@@ -149,12 +113,12 @@ async function main() {
     }
   }
 
-  console.log('✅ Created doctor schedules');
+  console.log('Created doctor schedules');
 
-  // Create appointments for the next 5 weekdays
+  // Create appointments for the next 3 weekdays
   const appointments = [];
   
-  for (let dayOffset = 0; dayOffset < 7; dayOffset++) {
+  for (let dayOffset = 0; dayOffset < 5; dayOffset++) {
     const date = new Date(start);
     date.setDate(start.getDate() + dayOffset);
     
@@ -163,20 +127,20 @@ async function main() {
     
     const localDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
     
-    // Create 2-3 appointments per doctor per day
+    // Create 1-2 appointments per doctor per day
     for (let doctorIndex = 0; doctorIndex < doctors.length; doctorIndex++) {
       const doctor = doctors[doctorIndex];
-      const appointmentsPerDay = 2 + (dayOffset % 2); // 2 or 3 appointments
+      const appointmentsPerDay = 1 + (dayOffset % 2); // 1 or 2 appointments
       
       for (let appointmentIndex = 0; appointmentIndex < appointmentsPerDay; appointmentIndex++) {
-        const hour = 9 + appointmentIndex * 2; // 9 AM, 11 AM, 1 PM
-        const patientIndex = (doctorIndex * 3 + appointmentIndex) % patients.length;
+        const hour = 10 + appointmentIndex * 2; // 10 AM, 12 PM
+        const patientIndex = (doctorIndex * 2 + appointmentIndex) % patients.length;
         
         // Determine status based on day
         let status: AppointmentStatus;
         if (dayOffset <= 1) {
           status = AppointmentStatus.completed;
-        } else if (dayOffset <= 3) {
+        } else if (dayOffset <= 2) {
           status = AppointmentStatus.confirmed;
         } else {
           status = AppointmentStatus.pending;
@@ -191,10 +155,10 @@ async function main() {
             endTime: `${(hour + 1).toString().padStart(2, '0')}:00`,
             status,
             notes: status === AppointmentStatus.completed 
-              ? 'Follow-up appointment completed successfully' 
+              ? 'Routine checkup completed' 
               : status === AppointmentStatus.confirmed
               ? 'Regular checkup scheduled'
-              : 'Initial consultation requested',
+              : 'Initial consultation',
           },
         });
         appointments.push(appointment);
@@ -202,7 +166,7 @@ async function main() {
     }
   }
 
-  console.log('✅ Created appointments');
+  console.log('Created appointments');
 
   // Create medical records for completed appointments
   const completedAppointments = appointments.filter(apt => apt.status === AppointmentStatus.completed);
@@ -213,13 +177,13 @@ async function main() {
         appointmentId: appointment.id,
         patientId: appointment.patientId,
         doctorId: appointment.doctorId,
-        notes: 'Patient presented with routine health concerns. Vital signs normal. Blood pressure: 120/80. Heart rate: 72 bpm. Recommended follow-up in 6 months. Continue current medications.',
+        notes: 'Patient examined. Vital signs normal. Follow-up recommended.',
         attachments: [],
       },
     });
   }
 
-  console.log('✅ Created medical records');
+  console.log('Created medical records');
 
   // Create sample audit logs
   await prisma.auditLog.createMany({
@@ -229,7 +193,7 @@ async function main() {
         entity: 'User',
         entityId: superadmin.id,
         action: AuditAction.create,
-        after: { role: 'superadmin', email: 'superadmin@pws.example' },
+        after: { role: 'superadmin', email: 'superadmin@test.com' },
         ip: '127.0.0.1',
         userAgent: 'Seed Script',
         requestId: 'seed-001',
@@ -247,7 +211,7 @@ async function main() {
     ],
   });
 
-  console.log('✅ Created audit logs');
+  console.log('Created audit logs');
 
   // Print summary
   const userCount = await prisma.user.count();
@@ -257,24 +221,24 @@ async function main() {
   const medicalRecordCount = await prisma.medicalRecord.count();
   const auditLogCount = await prisma.auditLog.count();
   
-  console.log('\n🎉 Comprehensive seed completed successfully!');
-  console.log('📊 Summary:');
+  console.log('\nSeed completed successfully!');
+  console.log('Summary:');
   console.log(`   Users: ${userCount} (1 superadmin, 1 admin, ${userCount - doctorCount - 2} patients, ${doctorCount} doctors)`);
   console.log(`   Doctors: ${doctorCount}`);
   console.log(`   Schedules: ${scheduleCount}`);
   console.log(`   Appointments: ${appointmentCount}`);
   console.log(`   Medical Records: ${medicalRecordCount}`);
   console.log(`   Audit Logs: ${auditLogCount}`);
-  console.log('\n🔑 Login Credentials (all use P@ssw0rd!):');
-  console.log('   Superadmin: superadmin@pws.example');
-  console.log('   Admin: admin@pws.example');
-  console.log('   Doctor: doctor1@pws.example (Dr. Sarah Johnson)');
-  console.log('   Patient: patient1@email.com (John Smith)');
+  console.log('\nLogin Credentials (all use P@ssw0rd!):');
+  console.log('   Superadmin: superadmin@test.com');
+  console.log('   Admin: admin@test.com');
+  console.log('   Doctor: doctor1@test.com');
+  console.log('   Patient: patient1@test.com');
 }
 
 main()
   .catch((e) => {
-    console.error('❌ Seed failed:', e);
+    console.error('Seed failed:', e);
     process.exit(1);
   })
   .finally(async () => {

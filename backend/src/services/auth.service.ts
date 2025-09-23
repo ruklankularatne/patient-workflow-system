@@ -24,6 +24,15 @@ export async function findUserByEmail(email: string) {
   return prisma.user.findUnique({ where: { email } });
 }
 
+export async function getUserById(id: string) {
+  return prisma.user.findUnique({ 
+    where: { id },
+    include: {
+      doctor: true // Include doctor relation if exists
+    }
+  });
+}
+
 export async function validatePassword(userId: string, password: string) {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) return false;

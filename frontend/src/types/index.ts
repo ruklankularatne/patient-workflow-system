@@ -30,6 +30,15 @@ export interface RegisterRequest {
   role?: Role;
 }
 
+export interface CreateDoctorRequest {
+  email: string;
+  fullName: string;
+  password: string;
+  specialty: string;
+  location: string;
+  bio?: string;
+}
+
 // Doctor Types
 export interface Doctor {
   id: string;
@@ -37,7 +46,6 @@ export interface Doctor {
   specialty: string;
   bio?: string;
   location: string;
-  profilePicture?: string;
   createdAt: string;
   updatedAt: string;
   user: User;
@@ -50,6 +58,20 @@ export interface Schedule {
   date: string;
   startTime: string;
   endTime: string;
+  isAvailable: boolean;
+  createdAt: string;
+  updatedAt: string;
+  doctor?: Doctor;
+}
+
+export interface DoctorSchedule {
+  id: string;
+  doctorId: string;
+  dayOfWeek?: number; // 0-6 (Sunday-Saturday)
+  specificDate?: string; // For specific date overrides
+  isAvailable: boolean;
+  startTime?: string;
+  endTime?: string;
   createdAt: string;
   updatedAt: string;
   doctor?: Doctor;
@@ -75,21 +97,24 @@ export interface Appointment {
 }
 
 export interface AppointmentRequest {
+  patientId: string;
   doctorId: string;
   date: string;
-  startTime: string;
-  endTime: string;
+  time: string;
   notes?: string;
 }
 
 // Medical Record Types
 export interface MedicalRecord {
   id: string;
-  appointmentId: string;
+  appointmentId?: string;
   patientId: string;
   doctorId: string;
   notes?: string;
-  attachments: string[];
+  diagnosis?: string;
+  treatment?: string;
+  medications?: string;
+  followUpDate?: string;
   createdAt: string;
   updatedAt: string;
   appointment?: Appointment;

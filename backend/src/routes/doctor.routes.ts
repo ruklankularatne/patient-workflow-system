@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth, requireRole } from '../middlewares/auth';
+import { uploadProfilePicture } from '../middlewares/fileUpload';
 import { FEATURES } from '../configs/features';
 import { createDoctor, getDoctors, getDoctorById, updateDoctor, deleteDoctor } from '../services/doctor.service';
 import { writeAudit } from '../audit/audit.service';
@@ -28,22 +29,32 @@ const UpdateDoctorSchema = z.object({
 
 router.get('/', async (req, res, next) => {
   try {
-    const { specialty, location, skip, take } = req.query;
+    const { specialty, location, search, skip, take } = req.query;
     const doctors = await getDoctors({
       specialty: specialty as string | undefined,
       location: location as string | undefined,
+      search: search as string | undefined,
       skip: skip ? Number(skip) : undefined,
       take: take ? Number(take) : undefined
     });
-    return res.json(doctors);
+    return res.json({
+      success: true,
+      data: doctors
+    });
   } catch (err) { return next(err); }
 });
 
 router.get('/:id', async (req, res, next) => {
   try {
     const doctor = await getDoctorById(req.params.id);
-    if (!doctor) return res.status(404).json({ message: 'Doctor not found' });
-    return res.json(doctor);
+    if (!doctor) return res.status(404).json({ 
+      success: false, 
+      message: 'Doctor not found' 
+    });
+    return res.json({
+      success: true,
+      data: doctor
+    });
   } catch (err) { return next(err); }
 });
 
@@ -52,7 +63,10 @@ router.post('/', requireAuth, requireRole('admin', 'superadmin'), async (req, re
     const data = CreateDoctorSchema.parse(req.body);
     const doctor = await createDoctor(data);
     await writeAudit({ actorUserId: (req as any).user?.sub, entity: 'Doctor', entityId: doctor.id, action: 'create', ip: req.ip, userAgent: req.get('user-agent') || undefined, before: null, after: { doctorId: doctor.id, userId: doctor.userId } });
-    return res.status(201).json(doctor);
+    return res.status(201).json({
+      success: true,
+      data: doctor
+    });
   } catch (err) { return next(err); }
 });
 
@@ -60,15 +74,15 @@ router.put('/:id', requireAuth, requireRole('admin', 'doctor', 'superadmin'), as
   try {
     const updates = UpdateDoctorSchema.parse(req.body);
     const doctor = await getDoctorById(req.params.id);
-    if (!doctor) return res.status(404).json({ message: 'Doctor not found' });
+    if (!doctor) return res.status(404).json({ success: false, message: 'Doctor not found' });
     if ((req as any).user?.role === 'doctor') {
-      if (!FEATURES.ALLOW_DOCTOR_PROFILE_UPDATE) return res.status(403).json({ message: 'Doctor profile editing is disabled' });
-      if ((req as any).user.sub !== doctor.userId) return res.status(403).json({ message: 'You can only edit your own profile' });
+      if (!FEATURES.ALLOW_DOCTOR_PROFILE_UPDATE) return res.status(403).json({ success: false, message: 'Doctor profile editing is disabled' });
+      if ((req as any).user.sub !== doctor.userId) return res.status(403).json({ success: false, message: 'You can only edit your own profile' });
     }
     const before = { ...doctor };
     const updated = await updateDoctor(req.params.id, updates);
     await writeAudit({ actorUserId: (req as any).user?.sub, entity: 'Doctor', entityId: req.params.id, action: 'update', ip: req.ip, userAgent: req.get('user-agent') || undefined, before, after: updated ?? undefined });
-    return res.json(updated);
+    return res.json({ success: true, data: updated });
   } catch (err) { return next(err); }
 });
 
@@ -81,6 +95,60 @@ router.delete('/:id', requireAuth, requireRole('admin', 'superadmin'), async (re
     await writeAudit({ actorUserId: (req as any).user?.sub, entity: 'Doctor', entityId: req.params.id, action: 'delete', ip: req.ip, userAgent: req.get('user-agent') || undefined, before, after: null });
     return res.status(204).send();
   } catch (err) { return next(err); }
+});
+
+// Upload profile picture for doctor
+router.post('/:id/profile-picture', requireAuth, requireRole('admin', 'doctor', 'superadmin'), uploadProfilePicture.single('profilePicture'), async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'No file uploaded'
+      });
+    }
+
+    const doctor = await getDoctorById(req.params.id);
+    if (!doctor) {
+      return res.status(404).json({
+        success: false,
+        message: 'Doctor not found'
+      });
+    }
+
+    // Check permissions for doctor role
+    if ((req as any).user?.role === 'doctor') {
+      if ((req as any).user.sub !== doctor.userId) {
+        return res.status(403).json({
+          success: false,
+          message: 'You can only update your own profile picture'
+        });
+      }
+    }
+
+    const before = { ...doctor };
+    const updated = await updateDoctor(req.params.id, {
+      profilePicture: req.file.filename
+    });
+
+    await writeAudit({
+      actorUserId: (req as any).user?.sub,
+      entity: 'Doctor',
+      entityId: req.params.id,
+      action: 'update',
+      ip: req.ip,
+      userAgent: req.get('user-agent') || undefined,
+      before,
+      after: updated
+    });
+
+    return res.json({
+      success: true,
+      data: updated,
+      message: 'Profile picture uploaded successfully'
+    });
+  } catch (err) {
+    return next(err);
+  }
 });
 
 export default router;

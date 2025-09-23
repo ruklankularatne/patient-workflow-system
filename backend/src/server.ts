@@ -2,6 +2,7 @@ import 'dotenv/config';
 import http from 'http';
 import { WebSocketServer } from 'ws';
 import app from './app';
+import { logger } from './utils/logger';
 
 const port = Number(process.env.PORT || 8080);
 const server = http.createServer(app);
@@ -12,5 +13,5 @@ wss.on('connection', (ws) => {
 });
 
 server.listen(port, () => {
-  console.log(`API listening on :${port}`);
+  logger.info({ port }, 'API server started');
 });

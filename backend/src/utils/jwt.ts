@@ -25,15 +25,17 @@ const JWT_REFRESH_EXPIRES_IN = process.env.JWT_REFRESH_EXPIRES_IN || '7d';
  * Generate access and refresh tokens for a user
  */
 export function generateTokens(payload: Omit<JWTPayload, 'iat' | 'exp'>): AuthTokens {
-  const accessToken = jwt.sign(payload, JWT_ACCESS_SECRET, {
-    expiresIn: JWT_ACCESS_EXPIRES_IN,
+  // @ts-ignore - JWT library typing issue with expiresIn string format
+  const accessToken = jwt.sign(payload, JWT_ACCESS_SECRET as string, {
+    expiresIn: JWT_ACCESS_EXPIRES_IN as string,
   });
 
+  // @ts-ignore - JWT library typing issue with expiresIn string format
   const refreshToken = jwt.sign(
     { userId: payload.userId },
-    JWT_REFRESH_SECRET,
+    JWT_REFRESH_SECRET as string,
     {
-      expiresIn: JWT_REFRESH_EXPIRES_IN,
+      expiresIn: JWT_REFRESH_EXPIRES_IN as string,
     }
   );
 
@@ -88,9 +90,10 @@ export const COOKIE_CONFIG = {
     options: {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict' as const,
+      sameSite: process.env.NODE_ENV === 'production' ? 'strict' as const : 'lax' as const,
       maxAge: 15 * 60 * 1000, // 15 minutes in milliseconds
       path: '/',
+      domain: process.env.NODE_ENV === 'production' ? undefined : '.localhost', // Allow cross-port cookies in dev
     },
   },
   refreshToken: {
@@ -98,9 +101,10 @@ export const COOKIE_CONFIG = {
     options: {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict' as const,
+      sameSite: process.env.NODE_ENV === 'production' ? 'strict' as const : 'lax' as const,
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days in milliseconds
       path: '/',
+      domain: process.env.NODE_ENV === 'production' ? undefined : '.localhost', // Allow cross-port cookies in dev
     },
   },
 };
@@ -119,7 +123,8 @@ export function signAccess(payload: { sub: string; role: string }) {
 }
 
 export function signRefresh(payload: { sub: string; role: string }) {
-  return jwt.sign({ userId: payload.sub }, JWT_REFRESH_SECRET, { expiresIn: JWT_REFRESH_EXPIRES_IN });
+  // @ts-ignore - JWT library typing issue with expiresIn string format
+  return jwt.sign({ userId: payload.sub }, JWT_REFRESH_SECRET as string, { expiresIn: JWT_REFRESH_EXPIRES_IN as string });
 }
 
 export function verifyAccess(token: string): { sub: string; role: string } {

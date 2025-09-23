@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { createAuditLog } from '../audit/audit.service.js';
+import { logger } from '../utils/logger';
 
 // Define AuditAction enum manually to avoid import issues
 export enum AuditAction {
@@ -20,7 +21,7 @@ export function auditMiddleware() {
     res.end = function(chunk?: any, encoding?: BufferEncoding | (() => void), callback?: () => void) {
       // Log the request after response is sent
       logRequest(req, res).catch(error => {
-        console.error('Audit logging failed:', error);
+        logger.error({ error: error instanceof Error ? error.message : String(error) }, 'Audit logging failed');
       });
 
       // Call original end function
@@ -63,7 +64,7 @@ async function logRequest(req: Request, res: Response) {
     });
   } catch (error) {
     // Silently fail to avoid disrupting the main flow
-    console.error('Failed to log API request:', error);
+    logger.error({ error: error instanceof Error ? error.message : String(error) }, 'Failed to log API request');
   }
 }
 

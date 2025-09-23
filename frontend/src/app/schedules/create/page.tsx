@@ -1,6 +1,6 @@
 "use client";
 import React, { useEffect, useState } from 'react';
-import { api } from '@/lib/api';
+import { apiClient } from '@/lib/api';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 
@@ -17,13 +17,16 @@ export default function CreateSchedulePage() {
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
-    api<DoctorOption[]>('/doctors').then(d => {
-      setDoctors(d);
-      if (user?.role === 'doctor') {
-        const mine = d.find(x => x.user.id === user.userId);
-        if (mine) setDoctorId(mine.id);
+    apiClient.getDoctors().then((response: any) => {
+      if (response.success && response.data) {
+        const d = response.data;
+        setDoctors(d);
+        if (user?.role === 'doctor') {
+          const mine = d.find((x: any) => x.user.id === user.id);
+          if (mine) setDoctorId(mine.id);
+        }
       }
-    }).catch(e=>setErr(e.message));
+    }).catch((e: any) => setErr(e.message));
   }, [user]);
 
   if (!user || (user.role!=='admin' && user.role!=='doctor' && user.role!=='superadmin')) {
@@ -33,9 +36,12 @@ export default function CreateSchedulePage() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault(); setErr(null);
     try {
-      await api('/schedules', { method: 'POST', body: JSON.stringify({ doctorId, date, startTime, endTime }) });
+      const response = await apiClient.createSchedule({ doctorId, date, startTime, endTime, isAvailable: true });
+      if (!response.success) {
+        throw new Error(response.message || 'Failed to create schedule');
+      }
       router.push('/schedules');
-    } catch (e:any) { setErr(e.message); }
+    } catch (e: any) { setErr(e.message); }
   };
 
   return (

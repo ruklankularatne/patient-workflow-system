@@ -1,42 +1,826 @@
 openapi: 3.0.3
 info:
   title: Patient Workflow System API
+  description: A comprehensive healthcare management system API for managing patients, doctors, appointments, and medical records.
   version: 1.1.0
+  contact:
+    name: Patient Workflow System
+    email: support@pws.example
 servers:
   - url: http://localhost:8080/api/v1
+    description: Development server
+  - url: https://api.pws.example/v1
+    description: Production server
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: accessToken
+      description: JWT access token stored in httpOnly cookie
+  
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique user identifier
+        email:
+          type: string
+          format: email
+          description: User's email address
+        fullName:
+          type: string
+          description: User's full name
+        role:
+          type: string
+          enum: [patient, doctor, admin, superadmin]
+          description: User's role in the system
+        createdAt:
+          type: string
+          format: date-time
+          description: Account creation timestamp
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last update timestamp
+      required: [id, email, fullName, role]
+
+    Doctor:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique doctor identifier
+        userId:
+          type: string
+          format: uuid
+          description: Associated user ID
+        specialty:
+          type: string
+          description: Doctor's medical specialty
+        location:
+          type: string
+          description: Doctor's practice location
+        bio:
+          type: string
+          nullable: true
+          description: Doctor's biography
+        profilePicture:
+          type: string
+          nullable: true
+          description: Doctor's profile picture URL or filename
+        user:
+          $ref: '#/components/schemas/User'
+      required: [id, userId, specialty, location]
+
+    RegisterRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          description: User's email address
+          example: "patient@example.com"
+        fullName:
+          type: string
+          minLength: 2
+          maxLength: 100
+          description: User's full name
+          example: "John Smith"
+        password:
+          type: string
+          minLength: 8
+          pattern: "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)"
+          description: Password (min 8 chars, must contain uppercase, lowercase, and number)
+          example: "P@ssw0rd123"
+        role:
+          type: string
+          enum: [patient]
+          default: patient
+          description: User role (only patient allowed for registration)
+      required: [email, fullName, password]
+
+    LoginRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          description: User's email address
+          example: "patient@example.com"
+        password:
+          type: string
+          minLength: 8
+          description: User's password
+          example: "P@ssw0rd123"
+      required: [email, password]
+
+    CreateDoctorRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          description: Doctor's email address
+          example: "doctor@example.com"
+        fullName:
+          type: string
+          minLength: 1
+          description: Doctor's full name
+          example: "Dr. Sarah Johnson"
+        password:
+          type: string
+          minLength: 8
+          description: Initial password for doctor account
+          example: "P@ssw0rd123"
+        specialty:
+          type: string
+          minLength: 1
+          description: Doctor's medical specialty
+          example: "Cardiology"
+        location:
+          type: string
+          minLength: 1
+          description: Doctor's practice location
+          example: "New York, NY"
+        bio:
+          type: string
+          description: Doctor's biography
+          example: "Board-certified cardiologist with 10+ years of experience"
+        profilePicture:
+          type: string
+          description: Profile picture filename or URL
+          example: "doctor1.jpg"
+      required: [email, fullName, password, specialty, location]
+
+    UpdateDoctorRequest:
+      type: object
+      properties:
+        specialty:
+          type: string
+          description: Doctor's medical specialty
+          example: "Cardiology"
+        location:
+          type: string
+          description: Doctor's practice location
+          example: "New York, NY"
+        bio:
+          type: string
+          nullable: true
+          description: Doctor's biography
+          example: "Board-certified cardiologist with 10+ years of experience"
+        profilePicture:
+          type: string
+          nullable: true
+          description: Profile picture filename or URL
+          example: "doctor1.jpg"
+        fullName:
+          type: string
+          description: Doctor's full name
+          example: "Dr. Sarah Johnson"
+        email:
+          type: string
+          format: email
+          description: Doctor's email address
+          example: "doctor@example.com"
+
+    ApiResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          description: Indicates if the request was successful
+        message:
+          type: string
+          description: Response message
+        data:
+          type: object
+          description: Response data (varies by endpoint)
+      required: [success]
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          default: false
+          description: Always false for error responses
+        message:
+          type: string
+          description: Error message
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+                description: Field that caused the error
+              message:
+                type: string
+                description: Error message for the field
+      required: [success, message]
+
+security:
+  - cookieAuth: []
+
 paths:
   /auth/register:
-    post: { summary: Register a user, responses: { "201": { description: Created } } }
+    post:
+      tags:
+        - Authentication
+      summary: Register a new patient account
+      description: Create a new patient account in the system
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+            example:
+              email: "patient@example.com"
+              fullName: "John Smith"
+              password: "P@ssw0rd123"
+      responses:
+        '201':
+          description: User successfully registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                success: true
+                message: "User registered successfully"
+                data:
+                  id: "123e4567-e89b-12d3-a456-426614174000"
+                  email: "patient@example.com"
+                  fullName: "John Smith"
+                  role: "patient"
+        '400':
+          description: Invalid request data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Email already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /auth/login:
-    post: { summary: Login and set httpOnly cookies, responses: { "200": { description: OK } } }
+    post:
+      tags:
+        - Authentication
+      summary: Login to the system
+      description: Authenticate user and set httpOnly cookies
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            example:
+              email: "patient@example.com"
+              password: "P@ssw0rd123"
+      responses:
+        '200':
+          description: Successfully logged in
+          headers:
+            Set-Cookie:
+              description: httpOnly cookies with access and refresh tokens
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                success: true
+                message: "Login successful"
+                data:
+                  user:
+                    id: "123e4567-e89b-12d3-a456-426614174000"
+                    email: "patient@example.com"
+                    fullName: "John Smith"
+                    role: "patient"
+        '400':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /auth/logout:
-    post: { summary: Logout and clear cookies, responses: { "204": { description: No Content } } }
+    post:
+      tags:
+        - Authentication
+      summary: Logout from the system
+      description: Clear authentication cookies and invalidate session
+      responses:
+        '204':
+          description: Successfully logged out
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /doctors:
-    get: { summary: List doctors, responses: { "200": { description: OK } } }
-    post: { summary: Create doctor (admin/superadmin), responses: { "201": { description: Created } } }
+    get:
+      tags:
+        - Doctors
+      summary: List all doctors
+      description: Retrieve a list of all doctors with optional filtering
+      parameters:
+        - name: specialty
+          in: query
+          description: Filter by medical specialty
+          schema:
+            type: string
+          example: "Cardiology"
+        - name: location
+          in: query
+          description: Filter by practice location
+          schema:
+            type: string
+          example: "New York, NY"
+        - name: search
+          in: query
+          description: Search by doctor name
+          schema:
+            type: string
+          example: "Sarah"
+        - name: skip
+          in: query
+          description: Number of records to skip (pagination)
+          schema:
+            type: integer
+            minimum: 0
+          example: 0
+        - name: take
+          in: query
+          description: Number of records to take (pagination)
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+          example: 20
+      responses:
+        '200':
+          description: List of doctors retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Doctor'
+              example:
+                success: true
+                message: "Doctors retrieved successfully"
+                data:
+                  - id: "123e4567-e89b-12d3-a456-426614174000"
+                    userId: "456e7890-e89b-12d3-a456-426614174000"
+                    specialty: "Cardiology"
+                    location: "New York, NY"
+                    bio: "Board-certified cardiologist with 10+ years of experience"
+                    profilePicture: "doctor1.jpg"
+                    user:
+                      id: "456e7890-e89b-12d3-a456-426614174000"
+                      email: "doctor@example.com"
+                      fullName: "Dr. Sarah Johnson"
+                      role: "doctor"
+
+    post:
+      tags:
+        - Doctors
+      summary: Create a new doctor
+      description: Create a new doctor account (admin/superadmin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDoctorRequest'
+            example:
+              email: "doctor@example.com"
+              fullName: "Dr. Sarah Johnson"
+              password: "P@ssw0rd123"
+              specialty: "Cardiology"
+              location: "New York, NY"
+              bio: "Board-certified cardiologist with 10+ years of experience"
+              profilePicture: "doctor1.jpg"
+      responses:
+        '201':
+          description: Doctor created successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Doctor'
+        '400':
+          description: Invalid request data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Email already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /doctors/{id}:
-    get: { summary: Get doctor by id, parameters: [{ in: path, name: id, required: true, schema: { type: string } }], responses: { "200": { description: OK }, "404": { description: Not Found } } }
-    put: { summary: Update doctor, parameters: [{ in: path, name: id, required: true, schema: { type: string } }], responses: { "200": { description: OK }, "403": { description: Forbidden }, "404": { description: Not Found } } }
-    delete: { summary: Delete doctor, parameters: [{ in: path, name: id, required: true, schema: { type: string } }], responses: { "204": { description: No Content }, "404": { description: Not Found } } }
+    get:
+      tags:
+        - Doctors
+      summary: Get doctor by ID
+      description: Retrieve detailed information about a specific doctor
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Doctor's unique identifier
+          schema:
+            type: string
+            format: uuid
+          example: "123e4567-e89b-12d3-a456-426614174000"
+      responses:
+        '200':
+          description: Doctor information retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Doctor'
+        '404':
+          description: Doctor not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      tags:
+        - Doctors
+      summary: Update doctor information
+      description: Update doctor profile information (admin/superadmin or own profile)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Doctor's unique identifier
+          schema:
+            type: string
+            format: uuid
+          example: "123e4567-e89b-12d3-a456-426614174000"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDoctorRequest'
+            example:
+              specialty: "Cardiology"
+              location: "New York, NY"
+              bio: "Updated biography"
+              profilePicture: "doctor1_updated.jpg"
+      responses:
+        '200':
+          description: Doctor updated successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Doctor'
+        '400':
+          description: Invalid request data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Doctor not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      tags:
+        - Doctors
+      summary: Delete doctor
+      description: Delete a doctor account (admin/superadmin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Doctor's unique identifier
+          schema:
+            type: string
+            format: uuid
+          example: "123e4567-e89b-12d3-a456-426614174000"
+      responses:
+        '204':
+          description: Doctor deleted successfully
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Doctor not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /schedules:
-    get: { summary: List schedules, responses: { "200": { description: OK } } }
-    post: { summary: Create schedule, responses: { "201": { description: Created } } }
+    get:
+      tags:
+        - Schedules
+      summary: List schedules
+      description: Retrieve doctor schedules with optional filtering
+      responses:
+        '200':
+          description: Schedules retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+    post:
+      tags:
+        - Schedules
+      summary: Create schedule
+      description: Create a new schedule entry
+      responses:
+        '201':
+          description: Schedule created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
   /schedules/{id}:
-    get: { summary: Get schedule, parameters: [{ in: path, name: id, required: true, schema: { type: string } }], responses: { "200": { description: OK }, "404": { description: Not Found } } }
-    put: { summary: Update schedule, parameters: [{ in: path, name: id, required: true, schema: { type: string } }], responses: { "200": { description: OK } } }
-    delete: { summary: Delete schedule, parameters: [{ in: path, name: id, required: true, schema: { type: string } }], responses: { "204": { description: No Content } } }
+    get:
+      tags:
+        - Schedules
+      summary: Get schedule by ID
+      description: Retrieve a specific schedule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Schedule's unique identifier
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Schedule retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '404':
+          description: Schedule not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      tags:
+        - Schedules
+      summary: Update schedule
+      description: Update schedule information
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Schedule's unique identifier
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Schedule updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+    delete:
+      tags:
+        - Schedules
+      summary: Delete schedule
+      description: Delete a schedule entry
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Schedule's unique identifier
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Schedule deleted successfully
+
   /appointments:
-    get: { summary: List appointments, responses: { "200": { description: OK } } }
-    post: { summary: Create appointment, responses: { "201": { description: Created } } }
+    get:
+      tags:
+        - Appointments
+      summary: List appointments
+      description: Retrieve appointments with optional filtering
+      responses:
+        '200':
+          description: Appointments retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+    post:
+      tags:
+        - Appointments
+      summary: Create appointment
+      description: Create a new appointment
+      responses:
+        '201':
+          description: Appointment created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
   /appointments/{id}/status:
-    put: { summary: Update appointment status, parameters: [{ in: path, name: id, required: true, schema: { type: string } }], responses: { "200": { description: OK } } }
+    put:
+      tags:
+        - Appointments
+      summary: Update appointment status
+      description: Update the status of an appointment
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Appointment's unique identifier
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Appointment status updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
   /medical-records/{appointmentId}:
-    get: { summary: Get medical record by appointment, parameters: [{ in: path, name: appointmentId, required: true, schema: { type: string } }], responses: { "200": { description: OK }, "404": { description: Not Found } } }
+    get:
+      tags:
+        - Medical Records
+      summary: Get medical record by appointment ID
+      description: Retrieve medical record associated with an appointment
+      parameters:
+        - name: appointmentId
+          in: path
+          required: true
+          description: Appointment's unique identifier
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Medical record retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '404':
+          description: Medical record not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /medical-records:
-    post: { summary: Upsert medical record, responses: { "201": { description: Created } } }
+    post:
+      tags:
+        - Medical Records
+      summary: Create or update medical record
+      description: Create a new medical record or update existing one
+      responses:
+        '201':
+          description: Medical record created/updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
   /analytics/visits-by-day:
-    get: { summary: Visits by day (admin), responses: { "200": { description: OK } } }
+    get:
+      tags:
+        - Analytics
+      summary: Get visits by day
+      description: Retrieve analytics data for visits grouped by day (admin only)
+      responses:
+        '200':
+          description: Analytics data retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
   /analytics/visits-by-doctor:
-    get: { summary: Visits by doctor (admin), responses: { "200": { description: OK } } }
+    get:
+      tags:
+        - Analytics
+      summary: Get visits by doctor
+      description: Retrieve analytics data for visits grouped by doctor (admin only)
+      responses:
+        '200':
+          description: Analytics data retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
   /analytics/visits-by-specialty:
-    get: { summary: Visits by specialty (admin), responses: { "200": { description: OK } } }
+    get:
+      tags:
+        - Analytics
+      summary: Get visits by specialty
+      description: Retrieve analytics data for visits grouped by specialty (admin only)
+      responses:
+        '200':
+          description: Analytics data retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'

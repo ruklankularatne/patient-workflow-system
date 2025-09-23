@@ -2,7 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 import { PrismaClient, Role } from '@prisma/client';
-import { generateTokens, verifyRefreshToken, COOKIE_CONFIG } from '../utils/jwt.js';
+import { generateTokens, verifyRefreshToken, verifyAccessToken, COOKIE_CONFIG } from '../utils/jwt.js';
 import { logger } from '../utils/logger.js';
 import { logCreate } from '../audit/audit.service.js';
 
@@ -11,15 +11,24 @@ const prisma = new PrismaClient();
 
 // Validation schemas
 const RegisterSchema = z.object({
-  email: z.string().email(),
-  fullName: z.string().min(1),
-  password: z.string().min(8),
-  role: z.enum(['superadmin', 'admin', 'doctor', 'patient']).default('patient')
+  email: z.string()
+    .email('Invalid email format')
+    .regex(/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/, 'Please enter a valid email address'),
+  fullName: z.string()
+    .min(2, 'Full name must be at least 2 characters')
+    .max(100, 'Full name must be less than 100 characters'),
+  password: z.string()
+    .min(8, 'Password must be at least 8 characters')
+    .regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/, 'Password must contain at least one uppercase letter, one lowercase letter, and one number'),
+  role: z.enum(['patient']).default('patient') // Only patients can register
 });
 
 const LoginSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(8)
+  email: z.string()
+    .email('Invalid email format')
+    .regex(/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/, 'Please enter a valid email address'),
+  password: z.string()
+    .min(8, 'Password must be at least 8 characters')
 });
 
 /**
@@ -97,11 +106,11 @@ router.post('/login', async (req: Request, res: Response, next: NextFunction) =>
   try {
     const { email, password } = LoginSchema.parse(req.body);
 
-    // Find user with doctor relation
+    // Find user 
     const user = await prisma.user.findUnique({
       where: { email },
       include: {
-        Doctor: true,
+        doctor: true // Include doctor relationship
       }
     });
 
@@ -157,12 +166,12 @@ router.post('/login', async (req: Request, res: Response, next: NextFunction) =>
     return res.json({
       success: true,
       message: 'Login successful',
-      user: {
+      data: {
         id: user.id,
         email: user.email,
         fullName: user.fullName,
         role: user.role,
-        doctorId: user.Doctor?.id,
+        doctorId: user.doctor?.id, // Add doctorId for doctor users
       }
     });
   } catch (error) {
@@ -199,7 +208,7 @@ router.post('/refresh', async (req: Request, res: Response, next: NextFunction) 
     const user = await prisma.user.findUnique({
       where: { id: payload.userId },
       include: {
-        Doctor: true,
+        doctor: true // Include doctor relationship
       }
     });
 
@@ -230,12 +239,12 @@ router.post('/refresh', async (req: Request, res: Response, next: NextFunction) 
     return res.json({
       success: true,
       message: 'Token refreshed successfully',
-      user: {
+      data: {
         id: user.id,
         email: user.email,
         fullName: user.fullName,
         role: user.role,
-        doctorId: user.Doctor?.id,
+        doctorId: user.doctor?.id, // Add doctorId for doctor users
       }
     });
   } catch (error) {
@@ -276,7 +285,7 @@ router.post('/logout', async (req: Request, res: Response) => {
  * Get current user profile
  * GET /auth/me
  */
-router.get('/me', async (req: Request, res: Response) => {
+router.get('/me', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const token = req.cookies[COOKIE_CONFIG.accessToken.name];
     
@@ -287,12 +296,34 @@ router.get('/me', async (req: Request, res: Response) => {
       });
     }
 
-    // This route can be used to verify if user is still logged in
-    // The actual user data would be added by auth middleware
+    // Use the JWT verification utility
+    const payload = verifyAccessToken(token);
+
+    // Get user data from database
+    const user = await prisma.user.findUnique({
+      where: { id: payload.userId },
+      include: {
+        doctor: true // Include doctor relationship for doctor users
+      }
+    });
+
+    if (!user || !user.isActive) {
+      return res.status(401).json({
+        success: false,
+        message: 'User not found or inactive'
+      });
+    }
+
     return res.json({
       success: true,
-      message: 'User is authenticated',
-      authenticated: true
+      data: {
+        id: user.id,
+        email: user.email,
+        fullName: user.fullName,
+        role: user.role,
+        createdAt: user.createdAt,
+        doctorId: user.doctor?.id, // Add doctorId for doctor users
+      }
     });
   } catch (error) {
     return res.status(401).json({
@@ -300,6 +331,26 @@ router.get('/me', async (req: Request, res: Response) => {
       message: 'Invalid token'
     });
   }
+});
+
+/**
+ * Debug authentication status
+ * GET /auth/debug
+ */
+router.get('/debug', async (req: Request, res: Response) => {
+  const accessToken = req.cookies[COOKIE_CONFIG.accessToken.name];
+  const refreshToken = req.cookies[COOKIE_CONFIG.refreshToken.name];
+  
+  return res.json({
+    success: true,
+    data: {
+      hasAccessToken: !!accessToken,
+      hasRefreshToken: !!refreshToken,
+      accessTokenLength: accessToken ? accessToken.length : 0,
+      cookies: req.cookies,
+      headers: req.headers
+    }
+  });
 });
 
 export default router;
